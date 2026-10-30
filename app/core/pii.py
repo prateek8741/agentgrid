@@ -119,14 +119,42 @@ def mask_pii(text: str) -> str:
 
 @dataclass
 class Redaction:
-    """Result of redacting text before sending it to an LLM.
+    """PII redaction state for one agent turn.
 
-    `mapping` lets the platform re-insert the original values into tool calls
-    (e.g. the LLM asks to save `<EMAIL_1>` as the lead's email).
+    `protect()` can be called on several texts (user message, history, tool
+    results) and always maps the same value to the same placeholder, so the
+    model sees a consistent `<EMAIL_1>`. `restore()` puts the real values back
+    at the tool boundary and in the final reply to the customer.
     """
 
-    text: str
-    mapping: dict[str, str] = field(default_factory=dict)
+    text: str = ""
+    mapping: dict[str, str] = field(default_factory=dict)  # placeholder -> original
+    _reverse: dict[str, str] = field(default_factory=dict, repr=False)
+    _counters: dict[str, int] = field(default_factory=dict, repr=False)
+
+    def placeholder(self, kind: str, value: str) -> str:
+        if value in self._reverse:
+            return self._reverse[value]
+        self._counters[kind] = self._counters.get(kind, 0) + 1
+        token = f"<{kind}_{self._counters[kind]}>"
+        self.mapping[token] = value
+        self._reverse[value] = token
+        return token
+
+    def protect(self, text: str) -> str:
+        if not text:
+            return text
+        for original, token in self._reverse.items():  # values already seen this turn
+            text = text.replace(original, token)
+        out = CARD_RE.sub(
+            lambda m: self.placeholder("CARD", m.group(0)) if _luhn_ok(m.group(0)) else m.group(0), text
+        )
+        out = AADHAAR_RE.sub(lambda m: self.placeholder("ID", m.group(0)), out)
+        out = PAN_RE.sub(lambda m: self.placeholder("ID", m.group(0)), out)
+        out = EMAIL_RE.sub(lambda m: self.placeholder("EMAIL", m.group(0)), out)
+        return PHONE_RE.sub(
+            lambda m: _sub_phones(m.group(0), lambda v: self.placeholder("PHONE", v.strip())), out
+        )
 
     def restore(self, value: str) -> str:
         for placeholder, original in self.mapping.items():
@@ -136,24 +164,6 @@ class Redaction:
 
 def redact_for_llm(text: str) -> Redaction:
     """Replace PII with stable placeholders (`<EMAIL_1>`, `<PHONE_1>`, ...)."""
-    mapping: dict[str, str] = {}
-    reverse: dict[str, str] = {}
-    counters: dict[str, int] = {}
-
-    def _placeholder(kind: str, value: str) -> str:
-        if value in reverse:
-            return reverse[value]
-        counters[kind] = counters.get(kind, 0) + 1
-        token = f"<{kind}_{counters[kind]}>"
-        mapping[token] = value
-        reverse[value] = token
-        return token
-
-    out = CARD_RE.sub(
-        lambda m: _placeholder("CARD", m.group(0)) if _luhn_ok(m.group(0)) else m.group(0), text
-    )
-    out = AADHAAR_RE.sub(lambda m: _placeholder("ID", m.group(0)), out)
-    out = PAN_RE.sub(lambda m: _placeholder("ID", m.group(0)), out)
-    out = EMAIL_RE.sub(lambda m: _placeholder("EMAIL", m.group(0)), out)
-    out = PHONE_RE.sub(lambda m: _sub_phones(m.group(0), lambda v: _placeholder("PHONE", v.strip())), out)
-    return Redaction(text=out, mapping=mapping)
+    redaction = Redaction()
+    redaction.text = redaction.protect(text)
+    return redaction

@@ -42,6 +42,8 @@ class TenantSettings(BaseModel):
     handover_confidence_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
     notification_email: EmailStr | None = None
     outgoing_webhook_url: str | None = Field(default=None, max_length=500)
+    # HMAC secret for X-AgentGrid-Signature on outgoing webhooks (generated if empty).
+    outgoing_webhook_secret: str | None = Field(default=None, max_length=200)
     widget_allowed_origins: list[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("timezone")

@@ -120,3 +120,96 @@ def bearer(tokens: dict[str, object]) -> dict[str, str]:
 
 async def auth_headers(client: AsyncClient, user: User) -> dict[str, str]:
     return bearer(await login(client, user.email))
+
+
+# ---------------------------------------------------------------- phase 2 helpers
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from app.agents.llm.router import LLMRouter, set_llm_router  # noqa: E402
+from app.agents.llm.scripted import Responder, ScriptedProvider  # noqa: E402
+from app.agents.orchestrator import get_orchestrator  # noqa: E402
+from app.agents.templates import get_template  # noqa: E402
+from app.channels.schema import AgentReply, ContactInfo, InboundMessage  # noqa: E402
+from app.models import Agent, Channel  # noqa: E402
+from app.services import booking_service  # noqa: E402
+from app.workers.actions import register_subscribers  # noqa: E402
+from app.workers.events import get_event_bus  # noqa: E402
+
+register_subscribers()
+
+
+@pytest.fixture(autouse=True)
+async def _no_llm() -> AsyncIterator[None]:
+    """Never call real LLM APIs from tests; individual tests opt into a scripted model."""
+    set_llm_router(LLMRouter([]))
+    yield
+    await get_event_bus().drain()
+    set_llm_router(None)
+
+
+def use_scripted_llm(responder: Responder) -> ScriptedProvider:
+    provider = ScriptedProvider(responder)
+    set_llm_router(LLMRouter([provider]))
+    return provider
+
+
+async def make_agent(tenant: Tenant, template_key: str, **overrides: object) -> Agent:
+    template = get_template(template_key)
+    assert template is not None
+    async with SessionLocal() as session:
+        await session.execute(
+            Agent.__table__.update().where(Agent.tenant_id == tenant.id).values(is_default=False)
+        )
+        agent = Agent(
+            tenant_id=tenant.id,
+            name=template.name,
+            is_default=True,
+            **{**template.agent_fields(), **overrides},
+        )
+        session.add(agent)
+        await session.commit()
+        await session.refresh(agent)
+        return agent
+
+
+async def make_slots(tenant: Tenant, days: int = 7, capacity: int = 1) -> int:
+    async with SessionLocal() as session:
+        fresh = await session.get(Tenant, tenant.id)
+        today = booking_service.local_today(fresh)
+        from datetime import time
+
+        created = await booking_service.generate_slots(
+            session,
+            fresh,
+            start_date=today + timedelta(days=1),
+            end_date=today + timedelta(days=days),
+            weekdays=list(range(7)),
+            day_start=time(10, 0),
+            day_end=time(12, 0),
+            slot_minutes=30,
+            capacity=capacity,
+        )
+        await session.commit()
+        return created
+
+
+async def chat(
+    tenant: Tenant, text: str, session_id: str = "s1", channel: Channel = Channel.WEB, **contact: str
+) -> AgentReply:
+    async with SessionLocal() as session:
+        reply = await get_orchestrator().handle(
+            session,
+            InboundMessage(
+                tenant_id=tenant.id,
+                channel=channel,
+                session_id=session_id,
+                text=text,
+                contact=ContactInfo(**contact),
+            ),
+        )
+    await get_event_bus().drain()
+    return reply
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)

@@ -74,9 +74,14 @@ class Settings(BaseSettings):
     # ---- LLM ----
     groq_api_key: SecretStr = SecretStr("")
     groq_model: str = "llama-3.3-70b-versatile"
+    groq_nlu_model: str = "llama-3.1-8b-instant"  # small, fast model for intent/entity extraction
     gemini_api_key: SecretStr = SecretStr("")
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_nlu_model: str = "gemini-2.5-flash-lite"
     llm_timeout_seconds: float = 30.0
+    llm_max_tool_iterations: int = Field(default=5, ge=1, le=10)
+    llm_history_messages: int = Field(default=12, ge=2, le=50)
+    faq_cache_ttl_seconds: int = 6 * 3600
 
     # ---- Limits / quotas ----
     rate_limit_per_minute: int = 60

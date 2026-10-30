@@ -101,6 +101,15 @@ async def login(db: AsyncSession, email: str, password: str, request: Request | 
     return response
 
 
+async def revoke_user_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Revoke every refresh token of a user (password change/reset, deactivation)."""
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
+
+
 async def _revoke_family(db: AsyncSession, family_id: uuid.UUID) -> None:
     await db.execute(
         update(RefreshToken)
@@ -118,7 +127,16 @@ async def refresh(db: AsyncSession, raw_token: str, request: Request | None) -> 
     row = (await db.execute(select(RefreshToken).where(RefreshToken.jti == payload.jti))).scalar_one_or_none()
     if row is None:
         raise AuthError("Unknown refresh token")
-    if row.revoked_at is not None:
+
+    # Claim the token atomically: of two concurrent refreshes with the same token
+    # only one UPDATE matches `revoked_at IS NULL`; the loser is treated as a replay.
+    claimed = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.id == row.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
         # A rotated token was replayed: assume theft and kill the whole session family.
         await _revoke_family(db, row.family_id)
         await db.commit()
@@ -134,7 +152,6 @@ async def refresh(db: AsyncSession, raw_token: str, request: Request | None) -> 
     if not tenant.is_active and user.role is not Role.SUPER_ADMIN:
         raise ForbiddenError("Tenant is suspended")
 
-    row.revoked_at = datetime.now(UTC)
     response = await _issue_tokens(db, user, tenant, request, family_id=row.family_id)
     await db.commit()
     return response
@@ -182,11 +199,7 @@ async def change_password(
         raise AuthError("Current password is incorrect")
     async with unscoped(db):  # the user row lives in the home tenant
         auth.user.password_hash = await hash_password(new)
-        await db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.user_id == auth.user.id, RefreshToken.revoked_at.is_(None))
-            .values(revoked_at=datetime.now(UTC))
-        )
+        await revoke_user_sessions(db, auth.user.id)
         audit_service.record(
             db,
             tenant_id=auth.user.tenant_id,

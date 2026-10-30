@@ -36,7 +36,7 @@ def main() -> None:
         reload_dirs=["app"] if args.reload else None,
         workers=workers,
         proxy_headers=True,
-        forwarded_allow_ips="*",
+        forwarded_allow_ips=settings.forwarded_allow_ips,
         log_config=None,  # our JSON logging is configured in app.main
         access_log=False,
         timeout_graceful_shutdown=20,

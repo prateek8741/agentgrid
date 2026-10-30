@@ -65,6 +65,11 @@ def test_database_url_normalisation() -> None:
     url, args = supa.async_database_url()
     assert url.startswith("postgresql+asyncpg://")
     assert args["statement_cache_size"] == 0
+    name_func = args["prepared_statement_name_func"]
+    assert name_func() != name_func()  # unique names: no collisions behind PgBouncer
+
+    _, args = Settings(database_url="postgresql://u:p@db.local/x?sslmode=prefer").async_database_url()
+    assert args == {"ssl": "prefer"}  # prefer must not be upgraded to require
 
     lite = Settings(database_url="sqlite:///./x.db")
     assert lite.async_database_url()[0].startswith("sqlite+aiosqlite://")
@@ -86,3 +91,17 @@ def test_cors_origins_csv_parsing() -> None:
         "https://a.io",
         "https://b.io",
     ]
+
+
+def test_adjacent_phone_numbers_are_all_masked() -> None:
+    assert mask_pii("call 9876543210 9123456789") == "call ***3210 ***6789"
+    assert redact_for_llm("call 9876543210 9123456789").text == "call <PHONE_1> <PHONE_2>"
+    assert redact_for_llm("9876543210 2024-01-05").text == "<PHONE_1> 2024-01-05"
+    assert mask_pii("+91 98765 43210 or 080 4567 8901") == "***3210 or ***8901"
+
+
+def test_dummy_hash_uses_configured_bcrypt_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import security
+
+    monkeypatch.setattr(security.settings, "bcrypt_rounds", 6)
+    assert security._dummy_hash().split("$")[2] == "06"  # same cost as real hashes -> same timing

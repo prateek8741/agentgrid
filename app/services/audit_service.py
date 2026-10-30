@@ -9,6 +9,7 @@ from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import client_ip
 from app.core.logging import get_logger, request_id_var
 from app.models import AuditLog, User
 
@@ -29,12 +30,7 @@ def record(
     """Stage an audit entry in the caller's transaction (committed with the change itself)."""
     ip = ua = None
     if request is not None:
-        forwarded = request.headers.get("x-forwarded-for")
-        ip = (
-            forwarded.split(",")[0].strip()
-            if forwarded
-            else (request.client.host if request.client else None)
-        )
+        ip = client_ip(request)
         ua = (request.headers.get("user-agent") or "")[:300] or None
     entry = AuditLog(
         tenant_id=tenant_id,

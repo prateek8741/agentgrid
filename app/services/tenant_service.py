@@ -196,23 +196,50 @@ async def get_accessible_tenant(db: AsyncSession, auth: AuthContext, tenant_id: 
     return tenant
 
 
+# Limits a tenant must not raise for itself: only the platform or the owning agency.
+PLATFORM_CONTROLLED_SETTINGS = frozenset({"monthly_token_quota", "rate_limit_per_minute"})
+
+
+def _is_owner_of(auth: AuthContext, tenant: Tenant) -> bool:
+    """Super admin, or an admin of the agency that owns this client tenant."""
+    if auth.role is Role.SUPER_ADMIN:
+        return True
+    return tenant.parent_id is not None and tenant.parent_id == auth.user.tenant_id
+
+
 async def update_tenant(
     db: AsyncSession, auth: AuthContext, tenant: Tenant, data: TenantUpdate, request: Request | None
 ) -> Tenant:
     changes = data.model_dump(exclude_unset=True)
-    if "status" in changes or "plan" in changes:
+    if ("status" in changes or "plan" in changes) and not _is_owner_of(auth, tenant):
         # Suspending / re-planning is a platform or agency (parent) decision.
-        is_parent_agency = tenant.parent_id is not None and tenant.parent_id == auth.user.tenant_id
-        if auth.role is not Role.SUPER_ADMIN and not is_parent_agency:
-            raise ForbiddenError("Only a super admin or the owning agency can change status or plan")
+        raise ForbiddenError("Only a super admin or the owning agency can change status or plan")
+
+    merged_settings: dict[str, object] | None = None
+    if data.settings is not None:
+        current = TenantSettings.model_validate(tenant.settings or {})
+        provided = data.settings.model_dump(mode="json", exclude_unset=True)
+        raised = {
+            key
+            for key in PLATFORM_CONTROLLED_SETTINGS & provided.keys()
+            if provided[key] != getattr(current, key)
+        }
+        if raised and not _is_owner_of(auth, tenant):
+            raise ForbiddenError(
+                f"Only a super admin or the owning agency can change: {', '.join(sorted(raised))}"
+            )
+        # Partial update: unspecified settings keep their current values.
+        merged_settings = TenantSettings.model_validate(
+            {**current.model_dump(mode="json"), **provided}
+        ).model_dump(mode="json")
     if tenant.kind is TenantKind.PLATFORM and changes.get("status") == TenantStatus.SUSPENDED:
         raise ForbiddenError("The platform tenant cannot be suspended")
 
     for field in ("name", "industry", "plan", "status"):
         if field in changes and changes[field] is not None:
             setattr(tenant, field, changes[field])
-    if data.settings is not None:
-        tenant.settings = data.settings.model_dump(mode="json")
+    if merged_settings is not None:
+        tenant.settings = merged_settings
 
     async with unscoped(db):
         audit_service.record(

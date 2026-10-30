@@ -7,6 +7,7 @@ and `validate_for_production()` refuses to boot with insecure values.
 
 from __future__ import annotations
 
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
@@ -18,6 +19,10 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 _INSECURE_JWT_DEFAULT = "change-me-to-a-long-random-string-at-least-32-chars"
+
+
+def _unique_statement_name() -> str:
+    return f"__asyncpg_{uuid.uuid4().hex}__"
 
 
 class Settings(BaseSettings):
@@ -35,6 +40,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
     web_concurrency: int = Field(default=1, ge=1, le=64)
+    # Proxies whose X-Forwarded-For is trusted (comma-separated IPs/CIDRs).
+    # Set to your load balancer's address range in production; never "*" on a public port.
+    forwarded_allow_ips: str = "127.0.0.1"
     host: str = "0.0.0.0"  # noqa: S104 - bind address for containers
     port: int = 8000
 
@@ -157,17 +165,20 @@ class Settings(BaseSettings):
         connect_args: dict[str, object] = {}
         sslmode = query.pop("sslmode", None)
         query.pop("channel_binding", None)  # libpq-only option (Neon)
-        if sslmode in {"require", "verify-ca", "verify-full", "prefer"}:
-            connect_args["ssl"] = "require" if sslmode in {"require", "prefer"} else sslmode
+        if sslmode in {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}:
+            connect_args["ssl"] = sslmode  # asyncpg accepts libpq sslmode names
         if "ssl" in query:
             connect_args["ssl"] = query.pop("ssl")
 
         host = parts.hostname or ""
         uses_pgbouncer = parts.port == 6543 or "pooler" in host
         if self.db_disable_prepared_statements or uses_pgbouncer:
-            # PgBouncer in transaction mode cannot track prepared statements.
+            # PgBouncer/Supavisor in transaction mode share server connections between
+            # clients: disable statement caches and give every prepared statement a
+            # unique name so they never collide ("prepared statement already exists").
             connect_args["statement_cache_size"] = 0
             connect_args["prepared_statement_cache_size"] = 0
+            connect_args["prepared_statement_name_func"] = _unique_statement_name
 
         clean = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
         return clean, connect_args

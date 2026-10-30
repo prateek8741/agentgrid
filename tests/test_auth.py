@@ -126,3 +126,64 @@ async def test_login_rate_limited(client: AsyncClient) -> None:
     assert codes[-1] == 429
     resp = await client.post("/api/v1/auth/login", json=payload)
     assert "retry-after" in resp.headers
+
+
+async def test_spoofed_forwarded_for_does_not_bypass_login_limit(client: AsyncClient) -> None:
+    codes = []
+    for i in range(12):
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": f"spoof{i}@example.org", "password": "wrong-password1"},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        )
+        codes.append(resp.status_code)
+    assert codes[-1] == 429  # per-IP limit still applies: the header is not trusted
+
+
+async def test_long_forwarded_for_header_does_not_break_audited_login(client: AsyncClient) -> None:
+    from sqlalchemy import select
+
+    from app.core.database import SessionLocal
+    from app.models import AuditLog
+
+    user = await make_user(await make_tenant(), Role.AGENT)
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": PASSWORD},
+        headers={"X-Forwarded-For": "x" * 300},
+    )
+    assert resp.status_code == 200
+    async with SessionLocal() as s:
+        entry = (
+            await s.execute(
+                select(AuditLog).where(AuditLog.actor_user_id == user.id, AuditLog.action == "auth.login")
+            )
+        ).scalar_one()
+    assert entry.ip == "127.0.0.1"
+
+
+async def test_concurrent_refresh_with_same_token_issues_at_most_one_pair(client: AsyncClient) -> None:
+    import asyncio
+
+    user = await make_user(await make_tenant(), Role.AGENT)
+    tokens = await login(client, user.email)
+    body = {"refresh_token": tokens["refresh_token"]}
+    results = await asyncio.gather(*(client.post("/api/v1/auth/refresh", json=body) for _ in range(4)))
+    assert sum(r.status_code == 200 for r in results) <= 1
+
+
+async def test_admin_password_reset_revokes_existing_sessions(client: AsyncClient) -> None:
+    tenant = await make_tenant()
+    admin = await make_user(tenant, Role.TENANT_ADMIN)
+    agent = await make_user(tenant, Role.AGENT)
+    agent_tokens = await login(client, agent.email)
+    admin_headers = bearer(await login(client, admin.email))
+
+    resp = await client.patch(
+        f"/api/v1/users/{agent.id}", json={"password": "ResetPass123"}, headers=admin_headers
+    )
+    assert resp.status_code == 200
+    refreshed = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": agent_tokens["refresh_token"]}
+    )
+    assert refreshed.status_code == 401

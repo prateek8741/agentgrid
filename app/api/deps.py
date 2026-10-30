@@ -58,11 +58,13 @@ class AuthContext:
 
 
 def client_ip(request: Request) -> str:
-    """Best-effort client IP (honours the first X-Forwarded-For hop behind a proxy)."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
-    return request.client.host if request.client else "unknown"
+    """Client IP used for rate limiting and audit.
+
+    X-Forwarded-For is deliberately NOT read here: uvicorn's proxy-headers
+    middleware rewrites `request.client` from it only when the direct peer is
+    listed in FORWARDED_ALLOW_IPS, so clients cannot spoof their address.
+    """
+    return (request.client.host if request.client else "unknown")[:64]
 
 
 async def can_access_tenant(db: AsyncSession, user: User, target: Tenant) -> bool:
@@ -74,7 +76,8 @@ async def can_access_tenant(db: AsyncSession, user: User, target: Tenant) -> boo
         return True
     if user.role is Role.TENANT_ADMIN and target.parent_id == user.tenant_id:
         home = await db.get(Tenant, user.tenant_id)
-        return home is not None and home.kind is TenantKind.AGENCY
+        # Suspending the agency must also cut off its admins inside client tenants.
+        return home is not None and home.kind is TenantKind.AGENCY and home.is_active
     return False
 
 

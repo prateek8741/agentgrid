@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import ORMModel
 
@@ -45,6 +45,15 @@ class AgentUpdate(BaseModel):
     recommended_integrations: list[str] | None = None
     is_active: bool | None = None
     is_default: bool | None = None
+
+    @model_validator(mode="after")
+    def _no_explicit_nulls(self) -> AgentUpdate:
+        # Omitting a field leaves it unchanged; sending null is only meaningful for
+        # llm_model ("use the platform default"). Every other column is NOT NULL.
+        nulled = sorted(f for f in self.model_fields_set if getattr(self, f) is None and f != "llm_model")
+        if nulled:
+            raise ValueError(f"These fields cannot be null: {', '.join(nulled)}")
+        return self
 
 
 class AgentOut(AgentBase, ORMModel):

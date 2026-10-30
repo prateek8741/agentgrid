@@ -48,12 +48,22 @@ async def verify_password(password: str, password_hash: str) -> bool:
     return await anyio.to_thread.run_sync(_verify_password_sync, password, password_hash)
 
 
-# A real hash used to equalise timing when the user does not exist.
-_DUMMY_HASH = bcrypt.hashpw(b"agentgrid-timing-equaliser", bcrypt.gensalt(rounds=4)).decode("ascii")
+_dummy_hashes: dict[int, str] = {}
+
+
+def _dummy_hash() -> str:
+    """A hash with the SAME cost as real ones, so unknown-email logins take as
+    long as wrong-password logins (no account enumeration by timing)."""
+    rounds = settings.bcrypt_rounds
+    if rounds not in _dummy_hashes:
+        _dummy_hashes[rounds] = bcrypt.hashpw(
+            b"agentgrid-timing-equaliser", bcrypt.gensalt(rounds=rounds)
+        ).decode("ascii")
+    return _dummy_hashes[rounds]
 
 
 async def verify_password_dummy() -> None:
-    await anyio.to_thread.run_sync(_verify_password_sync, "x", _DUMMY_HASH)
+    await anyio.to_thread.run_sync(_verify_password_sync, "x", _dummy_hash())
 
 
 # ---------------------------------------------------------------- JWT

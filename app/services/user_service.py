@@ -14,7 +14,7 @@ from app.core.rbac import Role, assignable_roles
 from app.core.security import hash_password
 from app.models import User
 from app.schemas.user import UserCreate, UserUpdate
-from app.services import audit_service
+from app.services import audit_service, auth_service
 
 
 async def list_users(
@@ -93,6 +93,9 @@ async def update_user(
         user.is_active = data.is_active
     if data.password is not None:
         user.password_hash = await hash_password(data.password)
+    if data.password is not None or data.is_active is False:
+        # A reset or deactivation must end existing sessions, not just future logins.
+        await auth_service.revoke_user_sessions(db, user.id)
     audit_service.record(
         db,
         tenant_id=auth.tenant_id,

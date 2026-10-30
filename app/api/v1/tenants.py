@@ -20,7 +20,11 @@ async def current_tenant(auth: ViewerAuth) -> TenantOut:
     return TenantOut.model_validate(auth.tenant)
 
 
-@router.put("/tenant/settings", response_model=TenantOut, summary="Update the active tenant's settings")
+@router.patch(
+    "/tenant/settings",
+    response_model=TenantOut,
+    summary="Partially update the active tenant's settings (quotas/rate limits: platform or agency only)",
+)
 async def update_current_settings(
     body: TenantSettings, request: Request, auth: AdminAuth, db: DB
 ) -> TenantOut:

@@ -174,3 +174,29 @@ async def test_business_admin_cannot_suspend_own_tenant(client: AsyncClient) -> 
     headers = await auth_headers(client, await make_user(tenant, Role.TENANT_ADMIN))
     resp = await client.patch(f"/api/v1/tenants/{tenant.id}", json={"status": "suspended"}, headers=headers)
     assert resp.status_code == 403
+
+
+async def test_suspending_agency_cuts_off_admins_inside_clients(client: AsyncClient) -> None:
+    platform = await make_tenant(kind=TenantKind.PLATFORM)
+    agency = await make_tenant(kind=TenantKind.AGENCY)
+    child = await make_tenant(parent_id=agency.id)
+    agency_admin = await make_user(agency, Role.TENANT_ADMIN)
+    super_headers = await auth_headers(client, await make_user(platform, Role.SUPER_ADMIN))
+
+    agency_headers = await auth_headers(client, agency_admin)
+    switched = (
+        await client.post(
+            "/api/v1/auth/switch-tenant", json={"tenant_id": str(child.id)}, headers=agency_headers
+        )
+    ).json()
+    child_headers = bearer(switched)
+    assert (await client.get("/api/v1/auth/me", headers=child_headers)).status_code == 200
+
+    resp = await client.patch(
+        f"/api/v1/tenants/{agency.id}", json={"status": "suspended"}, headers=super_headers
+    )
+    assert resp.status_code == 200
+
+    assert (await client.get("/api/v1/auth/me", headers=child_headers)).status_code == 403
+    refreshed = await client.post("/api/v1/auth/refresh", json={"refresh_token": switched["refresh_token"]})
+    assert refreshed.status_code == 401

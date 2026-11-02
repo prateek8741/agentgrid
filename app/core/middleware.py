@@ -6,6 +6,7 @@ import re
 import time
 import uuid
 
+from starlette.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.logging import get_logger, request_id_var, tenant_id_var
@@ -73,3 +74,34 @@ class RequestContextMiddleware:
                     )
             request_id_var.reset(rid_token)
             tenant_id_var.reset(tid_token)
+
+
+class SplitCORSMiddleware:
+    """Strict CORS for the console/API; open (no credentials) CORS for the public
+    widget endpoints, which are embedded on customers' websites."""
+
+    def __init__(self, app: ASGIApp, origins: list[str], public_prefixes: tuple[str, ...]) -> None:
+        self.public_prefixes = public_prefixes
+        self.private = CORSMiddleware(
+            app,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+            expose_headers=["X-Request-ID", "Retry-After"],
+            max_age=600,
+        )
+        self.public = CORSMiddleware(
+            app,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type"],
+            max_age=600,
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path", "").startswith(self.public_prefixes):
+            await self.public(scope, receive, send)
+        else:
+            await self.private(scope, receive, send)

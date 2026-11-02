@@ -81,6 +81,8 @@ async def get_or_create_conversation(
             meta["user_agent"] = inbound.metadata.user_agent
         if inbound.metadata.locale:
             meta["locale"] = inbound.metadata.locale
+        if inbound.metadata.extra.get("account_id"):
+            meta["account_id"] = str(inbound.metadata.extra["account_id"])[:64]
         conversation = Conversation(
             tenant_id=tenant.id,
             agent_id=agent.id,

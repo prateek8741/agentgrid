@@ -102,7 +102,8 @@ class OutboundMessage(BaseModel):
     tenant_id: uuid.UUID
     channel: Channel
     session_id: str
-    conversation_id: uuid.UUID
+    conversation_id: uuid.UUID | None = None  # None for system notices outside a conversation
+    account_id: str | None = None  # business number / page that received the conversation
     text: str
     quick_replies: list[str] = Field(default_factory=list)
     attachments: list[Attachment] = Field(default_factory=list)

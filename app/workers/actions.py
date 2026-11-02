@@ -35,6 +35,7 @@ WEBHOOK_EVENTS = {
     "ticket.created",
     "payment_link.created",
     "payment.completed",
+    "message.outbound",  # human-agent replies for REST-channel integrators
 }
 
 

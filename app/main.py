@@ -6,16 +6,18 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.api.payments_mock import router as payments_mock_router
+from app.api.public_pages import router as public_pages_router
 from app.api.router import api_router
+from app.api.webhooks import router as webhooks_router
+from app.api.widget import router as widget_router
 from app.core.config import settings
 from app.core.database import engine
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
-from app.core.middleware import RequestContextMiddleware
+from app.core.middleware import RequestContextMiddleware, SplitCORSMiddleware
 from app.core.redis import close_redis, get_redis, redis_mode
 from app.workers.actions import register_subscribers
 from app.workers.events import get_event_bus
@@ -35,6 +37,8 @@ OPENAPI_TAGS = [
     {"name": "operations", "description": "Conversations, workflow action log, LLM usage and quotas"},
     {"name": "api keys", "description": "Public widget keys and secret REST keys"},
     {"name": "audit", "description": "Audit trail of administrative actions"},
+    {"name": "channels", "description": "REST API channel (secret key) and WhatsApp / Messenger webhooks"},
+    {"name": "widget", "description": "Public web-chat widget API (public key + signed visitor session)"},
     {"name": "health", "description": "Liveness and readiness probes"},
 ]
 
@@ -82,18 +86,17 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
-        expose_headers=["X-Request-ID", "Retry-After"],
-        max_age=600,
+        SplitCORSMiddleware,
+        origins=settings.cors_origins,
+        public_prefixes=("/api/v1/widget", "/widget.js"),
     )
     app.add_middleware(RequestContextMiddleware)  # outermost: request id wraps everything
     app.include_router(health_router)
     app.include_router(api_router)
     app.include_router(payments_mock_router)
+    app.include_router(widget_router)
+    app.include_router(webhooks_router)
+    app.include_router(public_pages_router)
     return app
 
 

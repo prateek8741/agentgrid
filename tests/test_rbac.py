@@ -10,6 +10,10 @@ PUBLIC_ROUTES = {
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/refresh"),
     ("POST", "/api/v1/auth/logout"),
+    # Public web-widget API: authenticated by public key + signed visitor session (tests/test_channels.py).
+    ("GET", "/api/v1/widget/config"),
+    ("GET", "/api/v1/widget/history"),
+    ("POST", "/api/v1/widget/messages"),
 }
 
 

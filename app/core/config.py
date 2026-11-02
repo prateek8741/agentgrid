@@ -115,6 +115,10 @@ class Settings(BaseSettings):
     messenger_verify_token: SecretStr = SecretStr("")
     messenger_app_secret: SecretStr = SecretStr("")
     messenger_page_access_token: SecretStr = SecretStr("")
+    # Tenant (slug) that receives WhatsApp/Messenger traffic for numbers/pages not mapped in tenant
+    # settings, e.g. Meta's free test number in the demo.
+    channels_default_tenant: str = ""
+    graph_api_version: str = "v21.0"
 
     # ---- Notifications ----
     smtp_host: str = ""

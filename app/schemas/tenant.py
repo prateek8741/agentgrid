@@ -45,6 +45,9 @@ class TenantSettings(BaseModel):
     # HMAC secret for X-AgentGrid-Signature on outgoing webhooks (generated if empty).
     outgoing_webhook_secret: str | None = Field(default=None, max_length=200)
     widget_allowed_origins: list[str] = Field(default_factory=list, max_length=50)
+    # Channel routing: which WhatsApp number / Facebook page belongs to this tenant.
+    whatsapp_phone_number_id: str | None = Field(default=None, max_length=40)
+    messenger_page_id: str | None = Field(default=None, max_length=40)
 
     @field_validator("timezone")
     @classmethod

@@ -26,6 +26,8 @@ from app.models.analytics import AnalyticsDaily
 from app.services import usage_service
 
 FIRST_RESPONSE_TARGET_MS = 2000
+# Replies typed inside guided flows (names, numbers, "yes") are not reasons customers come to chat.
+FLOW_REPLY_INTENTS = ("unclear", "affirm", "deny")
 QUALIFIED_STATUSES = (LeadStatus.QUALIFIED, LeadStatus.PROPOSAL, LeadStatus.WON)
 
 
@@ -119,22 +121,30 @@ async def kpis(db: AsyncSession, tenant_id: uuid.UUID, since: datetime) -> dict[
             )
         )
     ).scalar_one()
-    booked_convs = (
-        await db.execute(
-            select(func.count(distinct(Appointment.conversation_id))).where(
-                appt_q, Appointment.conversation_id.is_not(None)
+    # Appointment conversion = conversations that booked / conversations that wanted to book.
+    # Some bookings start without a booking intent (e.g. "yes" to a site-visit offer after lead
+    # qualification), so the denominator is the union of both sets and the rate never exceeds 100%.
+    booked_ids = set(
+        (
+            await db.execute(
+                select(distinct(Appointment.conversation_id)).where(
+                    appt_q, Appointment.conversation_id.is_not(None)
+                )
             )
-        )
-    ).scalar_one()
-    booking_intent_convs = (
-        await db.execute(
-            select(func.count(distinct(Message.conversation_id))).where(
-                Message.tenant_id == tenant_id,
-                Message.created_at >= since,
-                Message.intent.in_(["book_appointment"]),
+        ).scalars()
+    )
+    intent_ids = set(
+        (
+            await db.execute(
+                select(distinct(Message.conversation_id)).where(
+                    Message.tenant_id == tenant_id,
+                    Message.created_at >= since,
+                    Message.intent == "book_appointment",
+                )
             )
-        )
-    ).scalar_one()
+        ).scalars()
+    )
+    booked_convs, booking_intent_convs = len(booked_ids), len(booked_ids | intent_ids)
 
     usage = (
         await db.execute(
@@ -241,6 +251,7 @@ async def breakdowns(db: AsyncSession, tenant_id: uuid.UUID, since: datetime) ->
                 Message.created_at >= since,
                 Message.role == MessageRole.USER,
                 Message.intent.is_not(None),
+                Message.intent.not_in(FLOW_REPLY_INTENTS),
             )
             .group_by(Message.intent)
             .order_by(func.count(Message.id).desc())

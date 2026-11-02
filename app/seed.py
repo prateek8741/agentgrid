@@ -438,6 +438,9 @@ async def _age_and_enrich(tenant: Tenant, rng: random.Random) -> None:
             for msg in messages:
                 if msg.role is MessageRole.ASSISTANT and (msg.meta or {}).get("decision") == "llm":
                     prompt, completion = rng.randint(650, 1400), rng.randint(60, 220)
+                    llm_ms = rng.randint(450, 1400)
+                    # Keep the illustrative history self-consistent: an LLM answer takes LLM time.
+                    msg.latency_ms = llm_ms + rng.randint(60, 250)
                     db.add(
                         LLMUsage(
                             tenant_id=tenant.id,
@@ -448,7 +451,7 @@ async def _age_and_enrich(tenant: Tenant, rng: random.Random) -> None:
                             prompt_tokens=prompt,
                             completion_tokens=completion,
                             total_tokens=prompt + completion,
-                            latency_ms=rng.randint(450, 1400),
+                            latency_ms=llm_ms,
                             created_at=msg.created_at,
                         )
                     )
@@ -467,6 +470,9 @@ async def _age_and_enrich(tenant: Tenant, rng: random.Random) -> None:
                             created_at=msg.created_at,
                         )
                     )
+            first_reply = next((m for m in messages if m.role is MessageRole.ASSISTANT), None)
+            if first_reply is not None and first_reply.latency_ms is not None:
+                conv.first_response_ms = first_reply.latency_ms
             for lead in (await db.execute(select(Lead).where(Lead.conversation_id == conv.id))).scalars():
                 lead.created_at = conv.created_at + timedelta(minutes=2)
                 lead.status = rng.choices(list(LeadStatus), weights=[30, 20, 18, 12, 10, 10])[0]

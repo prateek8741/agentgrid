@@ -19,6 +19,14 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
 target_metadata = Base.metadata
 
 
+# Objects managed by hand in migrations (not expressible on the portable models).
+MANUAL_INDEXES = {"ix_knowledge_chunks_embedding_hnsw"}
+
+
+def _include_object(obj: object, name: str | None, type_: str, reflected: bool, compare_to: object) -> bool:
+    return not (type_ == "index" and name in MANUAL_INDEXES)
+
+
 def _configure(connection: Connection | None = None, url: str | None = None) -> None:
     is_sqlite = settings.is_sqlite
     context.configure(
@@ -26,6 +34,7 @@ def _configure(connection: Connection | None = None, url: str | None = None) -> 
         url=url,
         target_metadata=target_metadata,
         compare_type=True,
+        include_object=_include_object,
         render_as_batch=is_sqlite,  # SQLite needs batch mode for ALTER TABLE
         literal_binds=url is not None,
         dialect_opts={"paramstyle": "named"} if url is not None else {},

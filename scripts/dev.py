@@ -10,7 +10,7 @@ Works the same in macOS/Linux terminals and Windows PowerShell:
     python scripts/dev.py test [-- -k auth]
     python scripts/dev.py lint
     python scripts/dev.py makemigration "add foo table"
-    python scripts/dev.py docker-up
+    python scripts/dev.py docker-up [--observability] [--worker]
     python scripts/dev.py docker-down
 
 Only the standard library is used here, so it runs before the venv exists.
@@ -184,13 +184,18 @@ def _docker() -> list[str]:
     return ["docker", "compose"]
 
 
-def cmd_docker_up(_args: argparse.Namespace) -> None:
-    run([*_docker(), "up", "-d", "--build"])
+def cmd_docker_up(args: argparse.Namespace) -> None:
+    cmd = _docker()
+    if args.observability:
+        cmd += ["--profile", "observability"]
+    if args.worker:
+        cmd += ["--profile", "worker"]
+    run([*cmd, "up", "-d", "--build"])
     info("Stack starting. API: http://localhost:8000  (docs: /docs)  -  logs: docker compose logs -f api")
 
 
 def cmd_docker_down(_args: argparse.Namespace) -> None:
-    run([*_docker(), "down"])
+    run([*_docker(), "--profile", "observability", "--profile", "worker", "down"])
 
 
 def main() -> None:
@@ -222,9 +227,10 @@ def main() -> None:
 
     sub.add_parser("lint", help="ruff lint + format check").set_defaults(func=cmd_lint)
 
-    sub.add_parser("docker-up", help="start the full stack with Docker Compose").set_defaults(
-        func=cmd_docker_up
-    )
+    p = sub.add_parser("docker-up", help="start the full stack with Docker Compose")
+    p.add_argument("--observability", action="store_true", help="also start Prometheus + Grafana")
+    p.add_argument("--worker", action="store_true", help="also start a separate background worker")
+    p.set_defaults(func=cmd_docker_up)
 
     sub.add_parser("docker-down", help="stop the Docker Compose stack").set_defaults(func=cmd_docker_down)
 

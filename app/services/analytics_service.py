@@ -127,16 +127,18 @@ async def kpis(db: AsyncSession, tenant_id: uuid.UUID, since: datetime) -> dict[
     booked_ids = set(
         (
             await db.execute(
-                select(distinct(Appointment.conversation_id)).where(
-                    appt_q, Appointment.conversation_id.is_not(None)
-                )
+                select(Appointment.conversation_id)
+                .distinct()
+                .where(appt_q, Appointment.conversation_id.is_not(None))
             )
         ).scalars()
     )
     intent_ids = set(
         (
             await db.execute(
-                select(distinct(Message.conversation_id)).where(
+                select(Message.conversation_id)
+                .distinct()
+                .where(
                     Message.tenant_id == tenant_id,
                     Message.created_at >= since,
                     Message.intent == "book_appointment",

@@ -7,7 +7,7 @@ from typing import Any
 from app.channels.meta import MessengerAdapter, WhatsAppAdapter
 from app.channels.schema import OutboundMessage
 from app.core.logging import get_logger
-from app.core.pubsub import inbox_channel, publish, widget_channel
+from app.core.pubsub import publish, widget_channel
 from app.models import Channel, Conversation, Tenant
 from app.workers.events import emit
 
@@ -35,8 +35,9 @@ async def deliver(
     message_id: str | None = None,
     push_to_widget: bool = True,
 ) -> None:
-    """Deliver to the customer and mirror to the live inbox.
+    """Deliver a reply to the customer on the conversation's channel.
 
+    (The live inbox is fed separately from domain events, see app.services.inbox_service.)
     Web/playground replies are pushed over the widget's WebSocket channel
     (`push_to_widget=False` when the reply already went back in the HTTP
     response). API-channel integrators receive `message.outbound` webhooks.
@@ -69,4 +70,3 @@ async def deliver(
         await ADAPTERS[channel].send(tenant, outbound)
     elif channel is Channel.API and sender == "human":
         await emit("message.outbound", tenant.id, payload, conversation_id=conversation.id)
-    await publish(inbox_channel(tenant.id), payload)

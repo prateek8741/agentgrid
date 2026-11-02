@@ -136,6 +136,9 @@ from app.workers.actions import register_subscribers  # noqa: E402
 from app.workers.events import get_event_bus  # noqa: E402
 
 register_subscribers()
+from app.services.inbox_service import register_inbox_subscriber  # noqa: E402
+
+register_inbox_subscriber()
 
 
 @pytest.fixture(autouse=True)

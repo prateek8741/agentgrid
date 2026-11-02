@@ -19,6 +19,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware, SplitCORSMiddleware
 from app.core.redis import close_redis, get_redis, redis_mode
+from app.services.inbox_service import register_inbox_subscriber
 from app.workers.actions import register_subscribers
 from app.workers.events import get_event_bus
 from app.workers.workflow import get_workflow_engine
@@ -31,6 +32,7 @@ OPENAPI_TAGS = [
     {"name": "users", "description": "Tenant users and roles"},
     {"name": "agents", "description": "AI agents, industry templates and the test playground"},
     {"name": "knowledge", "description": "Knowledge base: document upload, chunking, embeddings, search"},
+    {"name": "inbox", "description": "Human handover inbox: take over, reply live, hand back to AI"},
     {"name": "crm", "description": "Built-in mini CRM: leads and pipeline"},
     {"name": "booking", "description": "Availability slots and appointments"},
     {"name": "commerce", "description": "Product catalog (CSV) and support tickets"},
@@ -48,6 +50,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings.validate_for_production()
     get_redis()  # create the client eagerly so misconfiguration shows at boot
     register_subscribers()
+    register_inbox_subscriber()
     engine_ = get_workflow_engine()
     engine_.start()
     log.info(

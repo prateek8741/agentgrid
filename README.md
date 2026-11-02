@@ -2,10 +2,11 @@
 
 AI-powered customer engagement & business automation platform. This is a multi-tenant SaaS proof of concept for RFP **TTG-AI-AGENTGRID** (The Talent Grid).
 
-> Status: **Phase 4 complete.**
+> Status: **Phase 5 complete.**
 > - **Phase 1 foundations:** config, data model and migrations, JWT auth, RBAC, multi-tenancy with agency hierarchy, audit log, API keys, Docker, and the task runner.
 > - **Phase 2 agent:** LLM layer (Groq primary, Gemini fallback, automatic failover) and a hybrid NLU (rules, then LLM). A state-machine dialogue manager runs lead qualification, booking and cancellation. An open-question tool loop handles everything else.
 > - **Phase 2 tools:** 10 tools: CRM, booking, notifications, handover, products, payment links and tickets. Four industry templates.
+> - **Phase 5 human handover:** a live inbox over WebSocket and Redis pub/sub. Agents can take over, assign, and reply live on the customer's channel (widget, WhatsApp, Messenger or REST webhook). The AI stays silent while a human owns the conversation, and agents can hand back to the AI or close it.
 > - **Phase 4 channels:** an embeddable web widget (`/widget.js`: Shadow DOM, white-label, live WebSocket with HTTP fallback, signed visitor sessions); a REST API channel (secret key); WhatsApp Cloud API and Messenger webhooks (signature-verified, retry de-duplication, Graph API replies). A demo storefront is served at `/demo/<tenant-slug>`.
 > - **Phase 3 knowledge base:** upload PDF, DOCX, TXT or MD; section-aware chunking; fastembed bge-small embeddings (ONNX, no PyTorch). Search uses pgvector (HNSW) or in-process cosine, with a lexical re-rank. Answers are grounded with [n] citations, and the assistant says "I don't know" below the confidence threshold.
 > - **Phase 2 platform:** a workflow engine (retries, backoff, reminder timers), signed outgoing webhooks, HubSpot sync, PII redaction before the LLM, guardrails, token quotas and a FAQ cache.

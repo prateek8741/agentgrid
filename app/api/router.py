@@ -10,6 +10,7 @@ from app.api.v1 import (
     booking,
     channels,
     commerce,
+    inbox,
     knowledge,
     leads,
     operations,
@@ -25,6 +26,7 @@ api_router.include_router(agents.templates_router)
 api_router.include_router(agents.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(channels.router)
+api_router.include_router(inbox.router)
 api_router.include_router(leads.router)
 api_router.include_router(booking.router)
 api_router.include_router(commerce.router)

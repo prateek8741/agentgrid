@@ -26,6 +26,7 @@ ignore = [
 "tests/**" = ["S", "B"]
 "scripts/**" = ["S603", "S607"]
 "app/agents/templates.py" = ["E501"]  # prose data (personas, prompts)
+"app/simulate.py" = ["E501"]  # synthetic conversation data and report table
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

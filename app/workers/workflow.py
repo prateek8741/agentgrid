@@ -62,6 +62,11 @@ def action_handler(action_type: str) -> Callable[[ActionHandler], ActionHandler]
     return register
 
 
+def _load_builtin_handlers() -> None:
+    """Register the built-in handlers regardless of what the entrypoint imported (API, CLI, worker)."""
+    from app.workers import actions, maintenance  # noqa: F401
+
+
 def registered_actions() -> list[str]:
     return sorted(_HANDLERS)
 
@@ -82,6 +87,8 @@ def enqueue(
     correlation_id: str | None = None,
 ) -> ActionLog:
     """Stage an action in the caller's transaction. Call `engine.wake()` after commit."""
+    if action_type not in _HANDLERS:
+        _load_builtin_handlers()
     if action_type not in _HANDLERS:
         raise ValueError(f"Unknown action type: {action_type}")
     action = ActionLog(

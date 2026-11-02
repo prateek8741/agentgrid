@@ -8,6 +8,7 @@ Works the same in macOS/Linux terminals and Windows PowerShell:
     python scripts/dev.py seed           # seed super admin (+ demo tenants)
     python scripts/dev.py run            # start the API with auto-reload on http://localhost:8000
     python scripts/dev.py test [-- -k auth]
+    python scripts/dev.py simulate [--llm]  # synthetic conversations per template + KPIs
     python scripts/dev.py lint
     python scripts/dev.py makemigration "add foo table"
     python scripts/dev.py docker-up [--observability] [--worker]
@@ -154,8 +155,8 @@ def cmd_makemigration(args: argparse.Namespace) -> None:
     run([require_venv(), "-m", "alembic", "revision", "--autogenerate", "-m", args.message])
 
 
-def cmd_seed(_args: argparse.Namespace) -> None:
-    run([require_venv(), "-m", "app.cli", "seed"])
+def cmd_seed(args: argparse.Namespace) -> None:
+    run([require_venv(), "-m", "app.cli", "seed", *(["--reset"] if args.reset else [])])
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -167,6 +168,25 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 def cmd_test(args: argparse.Namespace) -> None:
     run([require_venv(), "-m", "pytest", *args.pytest_args])
+
+
+def cmd_simulate(args: argparse.Namespace) -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="agentgrid-sim-") as tmp:
+        env = {
+            "DATABASE_URL": f"sqlite+aiosqlite:///{(Path(tmp) / 'sim.db').as_posix()}",
+            "REDIS_URL": "",
+            "KAFKA_BOOTSTRAP_SERVERS": "",
+            "LOG_LEVEL": "WARNING",
+            "LOG_JSON": "false",
+        }
+        cmd: list[str | Path] = [require_venv(), "-m", "app.simulate"]
+        if args.llm:
+            cmd.append("--llm")
+        if args.json:
+            cmd.append("--json")
+        run(cmd, env=env)
 
 
 def cmd_lint(_args: argparse.Namespace) -> None:
@@ -214,7 +234,9 @@ def main() -> None:
     p.add_argument("message")
     p.set_defaults(func=cmd_makemigration)
 
-    sub.add_parser("seed", help="seed super admin and demo data").set_defaults(func=cmd_seed)
+    p = sub.add_parser("seed", help="seed super admin and demo data")
+    p.add_argument("--reset", action="store_true", help="delete and recreate the demo tenants")
+    p.set_defaults(func=cmd_seed)
 
     p = sub.add_parser("run", help="run the API server (auto-reload)")
     p.add_argument("--port", type=int, default=8000)
@@ -224,6 +246,13 @@ def main() -> None:
     p = sub.add_parser("test", help="run pytest (extra args after --)")
     p.add_argument("pytest_args", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_test)
+
+    p = sub.add_parser(
+        "simulate", help="synthetic conversations per template: intent accuracy, resolution, handover"
+    )
+    p.add_argument("--llm", action="store_true", help="use the configured LLM providers (uses tokens)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_simulate)
 
     sub.add_parser("lint", help="ruff lint + format check").set_defaults(func=cmd_lint)
 

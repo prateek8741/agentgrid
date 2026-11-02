@@ -60,12 +60,20 @@ async def ensure_platform_and_superadmin() -> tuple[str, str]:
     return email, password
 
 
-async def seed() -> None:
+async def seed(reset: bool = False, demo: bool = True) -> None:
     email, password = await ensure_platform_and_superadmin()
-    print("\nSeed complete.")
-    print("=" * 60)
-    print(f"  Super admin:  {email}  /  {password}")
-    print("=" * 60)
+    rows = [("Platform (super admin)", email, password)]
+    if demo:
+        from app.seed import seed_demo
+
+        rows += await seed_demo(reset=reset)
+    width = max(len(r[0]) for r in rows)
+    print("\nSeed complete. Demo logins (console at http://localhost:8000):")
+    print("=" * (width + 52))
+    for workspace, user, pwd in rows:
+        print(f"  {workspace.ljust(width)}  {user.ljust(30)}  {pwd}")
+    print("=" * (width + 52))
+    print("  Demo websites with the chat widget: /demo/sunrise-dental  and  /demo/urbannest-realty")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -73,7 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="apply database migrations")
-    sub.add_parser("seed", help="seed the platform tenant and super admin")
+    seed_parser = sub.add_parser("seed", help="seed the super admin, demo agency and two demo tenants")
+    seed_parser.add_argument("--reset", action="store_true", help="delete and recreate the demo tenants")
+    seed_parser.add_argument("--no-demo", action="store_true", help="only create the platform super admin")
     sub.add_parser("create-superadmin", help="create the super admin from env settings")
     args = parser.parse_args(argv)
 
@@ -81,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         run_migrations()
         print("Migrations applied.")
     elif args.command == "seed":
-        asyncio.run(seed())
+        asyncio.run(seed(reset=args.reset, demo=not args.no_demo))
     elif args.command == "create-superadmin":
         email, _ = asyncio.run(ensure_platform_and_superadmin())
         print(f"Super admin ready: {email}")

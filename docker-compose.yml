@@ -4,6 +4,9 @@
 #   docker compose exec api python -m app.cli seed
 #
 # Memory budget (hard limits):  api 768M + postgres 512M + redis 128M + redpanda 768M  ~= 2.2 GB
+# Optional profiles (not started by default, so they don't count against the budget):
+#   --profile worker         separate background worker (api runs workers in-process by default)
+#   --profile observability  Prometheus (:9090) + Grafana (:3000, admin/admin) with the AgentGrid dashboard
 # All images are multi-arch (linux/amd64 + linux/arm64): Apple Silicon, Intel and Windows (WSL2).
 name: agentgrid
 
@@ -130,6 +133,66 @@ services:
       resources:
         limits:
           memory: 768M
+    restart: unless-stopped
+
+  worker:
+    profiles: ["worker"]
+    image: agentgrid-api:local
+    command: ["python", "-m", "app.workers"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+asyncpg://agentgrid:agentgrid@postgres:5432/agentgrid
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      DB_POOL_SIZE: "3"
+      DB_MAX_OVERFLOW: "2"
+    volumes:
+      - model_cache:/app/.cache
+    depends_on:
+      api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=3d
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     restart: unless-stopped
 
 volumes:

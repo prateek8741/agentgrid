@@ -138,6 +138,13 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = ""
     metrics_enabled: bool = True
+    metrics_token: SecretStr = SecretStr("")  # if set, /metrics requires "Authorization: Bearer <token>"
+    # Indicative list prices (USD per 1M tokens) for the cost KPI; free tiers bill nothing.
+    llm_cost_input_per_million: float = 0.15
+    llm_cost_output_per_million: float = 0.60
+    # Run the workflow engine + event consumers inside the API process (lite mode). Set false when a
+    # separate `python -m app.workers` process is deployed (requires Kafka for cross-process events).
+    run_workers_in_api: bool = True
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -143,6 +143,7 @@ class AgentOrchestrator:
         conversation, contact = await conversation_service.get_or_create_conversation(
             db, tenant, agent, inbound
         )
+        ctx_new_conversation = (conversation.message_count or 0) == 0
         history = await conversation_service.recent_history(db, conversation.id)
         user_msg = conversation_service.add_message(
             db,
@@ -368,7 +369,17 @@ class AgentOrchestrator:
                 )
             except Exception:
                 log.debug("faq cache write skipped")
-        await self._publish(tenant, conversation, user_msg, assistant_msg, nlu, decision, ctx, latency_ms)
+        await self._publish(
+            tenant,
+            conversation,
+            user_msg,
+            assistant_msg,
+            nlu,
+            decision,
+            ctx,
+            latency_ms,
+            ctx_new_conversation,
+        )
 
         return AgentReply(
             conversation_id=conversation.id,
@@ -449,6 +460,7 @@ class AgentOrchestrator:
         decision: Decision,
         ctx: ToolContext,
         latency_ms: int,
+        new_conversation: bool = False,
     ) -> None:
         cid = conversation.id
         await emit(
@@ -462,6 +474,7 @@ class AgentOrchestrator:
                 "sentiment": nlu.sentiment,
                 "role": "user",
                 "text": user_msg.content,
+                "new_conversation": new_conversation,
             },
             conversation_id=cid,
         )
@@ -480,7 +493,10 @@ class AgentOrchestrator:
             conversation_id=cid,
         )
         for event_type, payload in ctx.events:
-            await emit(event_type, tenant.id, payload, conversation_id=cid)
+            # Tool events carry the channel so analytics can break them down per channel.
+            await emit(
+                event_type, tenant.id, {"channel": conversation.channel.value, **payload}, conversation_id=cid
+            )
         if decision.kind == "handover":
             await emit(
                 "handover.requested",

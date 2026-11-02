@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.llm.base import LLMResponse
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.metrics import LLM_LATENCY, LLM_REQUESTS, LLM_TOKENS
 from app.core.redis import get_redis
 from app.models import LLMUsage, Tenant
 
@@ -108,6 +109,12 @@ async def record(
         error_code=error_code,
     )
     db.add(row)
+    if not cached:
+        LLM_REQUESTS.labels(row.provider, purpose, "ok" if success else (error_code or "error")).inc()
+        if response is not None:
+            LLM_LATENCY.labels(row.provider, purpose).observe(response.latency_ms / 1000)
+            LLM_TOKENS.labels(str(tenant_id), row.provider, "prompt").inc(row.prompt_tokens)
+            LLM_TOKENS.labels(str(tenant_id), row.provider, "completion").inc(row.completion_tokens)
     if row.total_tokens:
         try:
             redis = get_redis()

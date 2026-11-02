@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.api.health import router as health_router
 from app.api.payments_mock import router as payments_mock_router
@@ -17,11 +17,13 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.core.metrics import MetricsMiddleware, render_metrics
 from app.core.middleware import RequestContextMiddleware, SplitCORSMiddleware
+from app.core.observability import init_sentry, init_tracing
 from app.core.redis import close_redis, get_redis, redis_mode
-from app.services.inbox_service import register_inbox_subscriber
-from app.workers.actions import register_subscribers
 from app.workers.events import get_event_bus
+from app.workers.maintenance import ensure_scheduled
+from app.workers.registry import register_all
 from app.workers.workflow import get_workflow_engine
 
 log = get_logger(__name__)
@@ -33,6 +35,7 @@ OPENAPI_TAGS = [
     {"name": "agents", "description": "AI agents, industry templates and the test playground"},
     {"name": "knowledge", "description": "Knowledge base: document upload, chunking, embeddings, search"},
     {"name": "inbox", "description": "Human handover inbox: take over, reply live, hand back to AI"},
+    {"name": "analytics", "description": "Dashboard KPIs, time series, reseller and platform views"},
     {"name": "crm", "description": "Built-in mini CRM: leads and pipeline"},
     {"name": "booking", "description": "Availability slots and appointments"},
     {"name": "commerce", "description": "Product catalog (CSV) and support tickets"},
@@ -49,10 +52,18 @@ OPENAPI_TAGS = [
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings.validate_for_production()
     get_redis()  # create the client eagerly so misconfiguration shows at boot
-    register_subscribers()
-    register_inbox_subscriber()
+    register_all()
+    bus = get_event_bus()
     engine_ = get_workflow_engine()
-    engine_.start()
+    if settings.run_workers_in_api:
+        await bus.start(consume=True)
+        engine_.start()
+        try:
+            await ensure_scheduled()
+        except Exception:  # e.g. migrations not applied yet; never block startup on maintenance
+            log.warning("could not schedule retention job")
+    else:
+        await bus.start(consume=False)
     log.info(
         "AgentGrid starting",
         extra={
@@ -66,7 +77,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await engine_.stop()
-        await get_event_bus().close()
+        await bus.close()
         await close_redis()
         await engine.dispose()
         log.info("AgentGrid stopped")
@@ -74,6 +85,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     configure_logging(settings.log_level, settings.log_json)
+    init_sentry()
     app = FastAPI(
         title=f"{settings.app_name} API",
         version="0.1.0",
@@ -93,6 +105,8 @@ def create_app() -> FastAPI:
         origins=settings.cors_origins,
         public_prefixes=("/api/v1/widget", "/widget.js"),
     )
+    if settings.metrics_enabled:
+        app.add_middleware(MetricsMiddleware)
     app.add_middleware(RequestContextMiddleware)  # outermost: request id wraps everything
     app.include_router(health_router)
     app.include_router(api_router)
@@ -100,6 +114,18 @@ def create_app() -> FastAPI:
     app.include_router(widget_router)
     app.include_router(webhooks_router)
     app.include_router(public_pages_router)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics(request: Request) -> Response:
+        token = settings.metrics_token.get_secret_value()
+        if not settings.metrics_enabled:
+            return Response(status_code=404)
+        if token and request.headers.get("authorization") != f"Bearer {token}":
+            return Response(status_code=401)
+        body, content_type = render_metrics()
+        return Response(body, media_type=content_type)
+
+    init_tracing(app)
     return app
 
 

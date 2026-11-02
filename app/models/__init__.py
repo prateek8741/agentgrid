@@ -1,6 +1,7 @@
 """ORM models. Importing this package registers every table on `Base.metadata`."""
 
 from app.models.agent import Agent
+from app.models.analytics import AnalyticsDaily
 from app.models.api_key import ApiKey, ApiKeyKind
 from app.models.audit import AuditLog
 from app.models.base import Base, TenantScopedMixin
@@ -30,6 +31,7 @@ __all__ = [
     "ActionLog",
     "ActionStatus",
     "Agent",
+    "AnalyticsDaily",
     "ApiKey",
     "ApiKeyKind",
     "Appointment",

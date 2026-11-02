@@ -64,6 +64,9 @@ class InProcessEventBus:
                 "event handler failed", extra={"event_type": event.type, "handler": handler.__qualname__}
             )
 
+    async def start(self, consume: bool = True) -> None:
+        """No-op: handlers run in-process."""
+
     async def drain(self) -> None:
         """Wait for in-flight handlers (tests, graceful shutdown)."""
         while self._tasks:
@@ -73,13 +76,21 @@ class InProcessEventBus:
         await self.drain()
 
 
-_bus: InProcessEventBus | None = None
+_bus: Any = None
 
 
-def get_event_bus() -> InProcessEventBus:
+def get_event_bus() -> Any:
+    """Kafka bus when KAFKA_BOOTSTRAP_SERVERS is set, otherwise the in-process bus."""
     global _bus
     if _bus is None:
-        _bus = InProcessEventBus()
+        from app.core.config import settings
+
+        if settings.kafka_bootstrap_servers:
+            from app.workers.kafka_bus import KafkaEventBus
+
+            _bus = KafkaEventBus(settings.kafka_bootstrap_servers, settings.kafka_topic_prefix)
+        else:
+            _bus = InProcessEventBus()
     return _bus
 
 

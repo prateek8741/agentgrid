@@ -132,13 +132,10 @@ from app.agents.templates import get_template  # noqa: E402
 from app.channels.schema import AgentReply, ContactInfo, InboundMessage  # noqa: E402
 from app.models import Agent, Channel  # noqa: E402
 from app.services import booking_service  # noqa: E402
-from app.workers.actions import register_subscribers  # noqa: E402
 from app.workers.events import get_event_bus  # noqa: E402
+from app.workers.registry import register_all  # noqa: E402
 
-register_subscribers()
-from app.services.inbox_service import register_inbox_subscriber  # noqa: E402
-
-register_inbox_subscriber()
+register_all()
 
 
 @pytest.fixture(autouse=True)

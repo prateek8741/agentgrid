@@ -24,3 +24,6 @@ fastembed==0.9.1
 onnxruntime==1.23.2
 pypdf==6.21.4
 python-docx==1.2.0
+# Event bus (used only when KAFKA_BOOTSTRAP_SERVERS is set) and Prometheus metrics.
+aiokafka==0.15.0
+prometheus-client==0.26.0

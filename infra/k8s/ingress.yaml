@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentgrid
+  namespace: agentgrid
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"   # long-lived WebSockets (widget + inbox)
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m          # 10 MB document uploads
+spec:
+  ingressClassName: nginx
+  tls: [{ hosts: [app.agentgrid.example], secretName: agentgrid-tls }]
+  rules:
+    - host: app.agentgrid.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: agentgrid-api, port: { name: http } } }

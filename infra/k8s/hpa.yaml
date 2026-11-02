@@ -1,0 +1,40 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agentgrid-api
+  namespace: agentgrid
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: agentgrid-api }
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 65 } }
+    - type: Resource
+      resource: { name: memory, target: { type: Utilization, averageUtilization: 75 } }
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 300 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agentgrid-worker
+  namespace: agentgrid
+spec:
+  # For queue-depth scaling, replace with a KEDA ScaledObject on Kafka consumer lag.
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: agentgrid-worker }
+  minReplicas: 1
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentgrid-api
+  namespace: agentgrid
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/component: api }

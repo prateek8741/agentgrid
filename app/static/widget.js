@@ -99,6 +99,7 @@
   head.appendChild(logo); head.appendChild(titles); head.appendChild(closeBtn);
   var body = el("div", "ag-body"); body.setAttribute("aria-live", "polite");
   var typing = el("div", "ag-typing", "Typing…");
+  body.appendChild(typing); // messages are inserted above the typing indicator
   var foot = el("div", "ag-foot");
   var input = el("textarea"); input.placeholder = "Type your message…"; input.setAttribute("aria-label", "Message");
   input.maxLength = 2000;

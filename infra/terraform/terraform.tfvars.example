@@ -1,0 +1,6 @@
+region                     = "ap-south-1"
+environment                = "prod"
+domain_name                = "app.agentgrid.example"
+acm_certificate_arn        = "arn:aws:acm:ap-south-1:123456789012:certificate/xxxx"
+cloudfront_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/yyyy"
+image_tag                  = "v0.1.0"

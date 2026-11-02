@@ -1,0 +1,21 @@
+# Run before rolling out a new version:  kubectl -n agentgrid apply -f migrate-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentgrid-migrate
+  namespace: agentgrid
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: migrate
+          image: ghcr.io/your-org/agentgrid-api:0.1.0
+          command: ["python", "-m", "app.cli", "migrate"]
+          envFrom:
+            - configMapRef: { name: agentgrid-config }
+            - secretRef: { name: agentgrid-secrets }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }

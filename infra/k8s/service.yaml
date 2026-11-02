@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentgrid-api
+  namespace: agentgrid
+spec:
+  selector: { app.kubernetes.io/name: agentgrid, app.kubernetes.io/component: api }
+  ports: [{ name: http, port: 80, targetPort: http }]

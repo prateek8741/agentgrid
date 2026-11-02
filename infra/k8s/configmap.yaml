@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentgrid-config
+  namespace: agentgrid
+data:
+  APP_ENV: production
+  PUBLIC_BASE_URL: https://app.agentgrid.example
+  CORS_ORIGINS: https://app.agentgrid.example
+  LOG_JSON: "true"
+  WEB_CONCURRENCY: "2"
+  RUN_WORKERS_IN_API: "false"        # background work runs in the worker Deployment
+  KAFKA_BOOTSTRAP_SERVERS: kafka.agentgrid.svc:9092
+  DB_POOL_SIZE: "10"
+  DB_MAX_OVERFLOW: "10"
+  FORWARDED_ALLOW_IPS: "10.0.0.0/8"  # the ingress controller's pod network
+  METRICS_ENABLED: "true"

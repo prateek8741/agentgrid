@@ -32,6 +32,15 @@ COPY --chown=app:app app ./app
 RUN mkdir -p /app/data /app/.cache && chown -R app:app /app/data /app/.cache
 
 USER app
+
+# Bake the embedding model (~64 MB) into the image so cold starts (Render / Fargate)
+# don't download it. Build with --build-arg PRELOAD_EMBEDDINGS=false to skip.
+ARG PRELOAD_EMBEDDINGS=true
+ENV EMBEDDING_CACHE_DIR=/app/.cache/fastembed
+RUN if [ "$PRELOAD_EMBEDDINGS" = "true" ]; then \
+      python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/app/.cache/fastembed')"; \
+    fi
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

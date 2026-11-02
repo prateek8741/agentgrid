@@ -27,6 +27,9 @@ INJECTION_PATTERNS = [
 ]
 _INJECTION_RE = re.compile("|".join(INJECTION_PATTERNS), re.IGNORECASE)
 _UNSAFE_LINK_RE = re.compile(r"\]\(\s*(javascript|data|vbscript):[^)]*\)", re.IGNORECASE)
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_CJK_CITE_RE = re.compile(r"【(\d{1,2})】")
 
 # Random per process: if it ever appears in model output, the system prompt leaked.
 CANARY = f"AGC-{secrets.token_hex(6)}"
@@ -64,6 +67,10 @@ def filter_output(text: str | None, blocked_terms: list[str]) -> OutputCheck:
     if term:
         return OutputCheck(text=SAFE_FALLBACK, blocked=True, reason="blocked_term")
     cleaned = _UNSAFE_LINK_RE.sub("](#)", text).strip()
+    # Channel-neutral plain text: models sometimes emit markdown emphasis or CJK citation brackets.
+    cleaned = _BOLD_RE.sub(lambda m: m.group(1) or m.group(2), cleaned)
+    cleaned = _HEADING_RE.sub("", cleaned)
+    cleaned = _CJK_CITE_RE.sub(r"[\1]", cleaned)
     if len(cleaned) > MAX_REPLY_CHARS:
         cut = cleaned[:MAX_REPLY_CHARS]
         cleaned = cut[: cut.rfind(" ")] + "…" if " " in cut else cut

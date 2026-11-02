@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import re
 import secrets
 import time
@@ -41,6 +42,9 @@ from app.core.pii import Redaction
 from app.core.redis import get_redis
 from app.core.tenancy import set_session_tenant
 from app.models import Agent, ConversationStatus, MessageRole, Tenant
+from app.rag import answer as rag_answer
+from app.rag import service as rag_service
+from app.rag.service import SearchResult
 from app.services import agent_service, booking_service, conversation_service, usage_service
 from app.workers.events import emit
 from app.workers.workflow import get_workflow_engine
@@ -225,7 +229,24 @@ class AgentOrchestrator:
         loop: LoopResult | None = None
         cache_key: str | None = None
         cache_hit = False
-        if decision.kind == "llm" and router is not None:
+        rag_outcome: str | None = None
+        rag: SearchResult | None = None
+        if decision.kind == "llm" and "knowledge_search" in (agent.enabled_tools or []):
+            # Retrieval runs locally (embeddings never leave the platform), so the raw text is fine here.
+            rag = await rag_service.search(db, tenant.id, text)
+            rag_outcome = "confident" if rag.confident else ("low_confidence" if rag.chunks else "empty_kb")
+
+        if (
+            decision.kind == "llm"
+            and rag_outcome == "low_confidence"
+            and nlu.intent in FAQ_INTENTS
+            and decision.pending_question is None
+            and not ({"phone", "email", "name"} & nlu.entities.keys())  # sharing details = lead, not FAQ
+        ):
+            # Grounding rule: a knowledge question we can't support with sources gets a scripted reply.
+            reply_text = rag_answer.DONT_KNOW
+            decision.quick_replies = ["Talk to a human"]
+        elif decision.kind == "llm" and router is not None:
             cacheable = (
                 decision.pending_question is None
                 and not state.get("flow")
@@ -241,7 +262,9 @@ class AgentOrchestrator:
                 except Exception:
                     cached = None
                 if cached:
-                    reply_text, cache_hit = cached, True
+                    payload = json.loads(cached)
+                    reply_text, cache_hit = payload["text"], True
+                    ctx.citations.extend(payload.get("citations", []))
                     await usage_service.record(
                         db,
                         tenant_id=tenant.id,
@@ -252,15 +275,25 @@ class AgentOrchestrator:
                         conversation_id=conversation.id,
                     )
             if not cache_hit:
+                extra_context = None
+                if rag is not None and rag.confident:
+                    ctx.citations.extend(rag_answer.citations(rag))
+                    extra_context = rag_answer.context_block(rag, redaction.protect)
                 loop = await self._run_llm(
-                    db, ctx, router, history, text, decision.pending_question, today, tz.key
+                    db, ctx, router, history, text, decision.pending_question, today, tz.key, extra_context
                 )
                 reply_text = redaction.restore(loop.text) if loop.text else None
+                if reply_text and ctx.citations:
+                    ctx.citations[:] = rag_answer.cited_only(reply_text, ctx.citations)
                 if reply_text is None:
                     reply_text = LLM_FALLBACK
                     decision.quick_replies = ["Talk to a human"]
                 if ctx.handover_reason:
                     decision = Decision("handover", reason=ctx.handover_reason, text=reply_text)
+        elif decision.kind == "llm" and rag is not None and rag.confident:
+            # No LLM available (no keys / quota exhausted): answer extractively from the best source.
+            ctx.citations.extend(rag_answer.citations(rag)[:1])
+            reply_text = rag_answer.extractive_answer(text, rag)
         elif decision.kind == "llm":
             reply_text = LLM_FALLBACK
             decision.quick_replies = ["Talk to a human"]
@@ -298,6 +331,7 @@ class AgentOrchestrator:
                 "nlu_source": nlu.source,
                 "guardrail": check.reason,
                 "flow_event": decision.flow_event,
+                "rag": rag_outcome,
                 "quick_replies": decision.quick_replies,
             },
         )
@@ -327,7 +361,11 @@ class AgentOrchestrator:
             and all(c["name"] == "knowledge_search" for c in loop.tool_calls)
         ):
             try:
-                await get_redis().set(cache_key, reply_text, ex=settings.faq_cache_ttl_seconds)
+                await get_redis().set(
+                    cache_key,
+                    json.dumps({"text": reply_text, "citations": ctx.citations}),
+                    ex=settings.faq_cache_ttl_seconds,
+                )
             except Exception:
                 log.debug("faq cache write skipped")
         await self._publish(tenant, conversation, user_msg, assistant_msg, nlu, decision, ctx, latency_ms)
@@ -353,6 +391,8 @@ class AgentOrchestrator:
                 "cache_hit": cache_hit,
                 "flow": state.get("flow"),
                 "guardrail": check.reason,
+                "rag": rag_outcome,
+                "rag_confidence": round(rag.confidence, 3) if rag else None,
             },
         )
 
@@ -366,6 +406,7 @@ class AgentOrchestrator:
         pending_question: str | None,
         today: Any,
         tz_name: str,
+        extra_context: str | None = None,
     ) -> LoopResult:
         async def on_usage(response: LLMResponse) -> None:
             await usage_service.record(
@@ -382,6 +423,7 @@ class AgentOrchestrator:
             today=today.strftime("%A %d %B %Y"),
             timezone=tz_name,
             pending_question=pending_question,
+            extra_context=extra_context,
         )
         model = ctx.agent.llm_model
         return await run_agent_loop(

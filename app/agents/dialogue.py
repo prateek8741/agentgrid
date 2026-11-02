@@ -163,13 +163,9 @@ class DialogueManager:
             return Decision("handover", reason="low_confidence")
         state["clarifications"] = 0
 
-        if self.llm_available:
-            return Decision("llm")
-        return Decision(
-            "reply",
-            "I'm not able to answer that right now. Would you like me to connect you with our team?",
-            quick_replies=["Talk to a human"],
-        )
+        # Open question. The orchestrator answers with LLM + RAG, or extractively from the
+        # knowledge base when no LLM is available, or with a scripted fallback.
+        return Decision("llm")
 
     # ------------------------------------------------------------------ flows
     def _steps(self, flow: str) -> list[dict[str, Any]]:

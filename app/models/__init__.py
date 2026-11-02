@@ -20,6 +20,7 @@ from app.models.enums import (
     TicketPriority,
     TicketStatus,
 )
+from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.models.tenant import Tenant, TenantKind, TenantStatus
 from app.models.usage import LLMUsage
 from app.models.user import RefreshToken, User
@@ -40,6 +41,8 @@ __all__ = [
     "Contact",
     "Conversation",
     "ConversationStatus",
+    "KnowledgeChunk",
+    "KnowledgeDocument",
     "LLMUsage",
     "Lead",
     "LeadStatus",

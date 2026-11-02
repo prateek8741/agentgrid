@@ -2,10 +2,11 @@
 
 AI-powered customer engagement & business automation platform. This is a multi-tenant SaaS proof of concept for RFP **TTG-AI-AGENTGRID** (The Talent Grid).
 
-> Status: **Phase 2 complete.**
+> Status: **Phase 3 complete.**
 > - **Phase 1 foundations:** config, data model and migrations, JWT auth, RBAC, multi-tenancy with agency hierarchy, audit log, API keys, Docker, and the task runner.
 > - **Phase 2 agent:** LLM layer (Groq primary, Gemini fallback, automatic failover) and a hybrid NLU (rules, then LLM). A state-machine dialogue manager runs lead qualification, booking and cancellation. An open-question tool loop handles everything else.
 > - **Phase 2 tools:** 10 tools: CRM, booking, notifications, handover, products, payment links and tickets. Four industry templates.
+> - **Phase 3 knowledge base:** upload PDF, DOCX, TXT or MD; section-aware chunking; fastembed bge-small embeddings (ONNX, no PyTorch). Search uses pgvector (HNSW) or in-process cosine, with a lexical re-rank. Answers are grounded with [n] citations, and the assistant says "I don't know" below the confidence threshold.
 > - **Phase 2 platform:** a workflow engine (retries, backoff, reminder timers), signed outgoing webhooks, HubSpot sync, PII redaction before the LLM, guardrails, token quotas and a FAQ cache.
 >
 > The full documentation (architecture, deployment, demo walkthrough) is written in Phase 9.

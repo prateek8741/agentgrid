@@ -28,6 +28,7 @@ OPENAPI_TAGS = [
     {"name": "tenants", "description": "Tenants, agency hierarchy, settings and white-label branding"},
     {"name": "users", "description": "Tenant users and roles"},
     {"name": "agents", "description": "AI agents, industry templates and the test playground"},
+    {"name": "knowledge", "description": "Knowledge base: document upload, chunking, embeddings, search"},
     {"name": "crm", "description": "Built-in mini CRM: leads and pipeline"},
     {"name": "booking", "description": "Availability slots and appointments"},
     {"name": "commerce", "description": "Product catalog (CSV) and support tickets"},

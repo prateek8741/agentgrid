@@ -174,3 +174,8 @@ async def test_analyze_invalid_llm_json_falls_back() -> None:
         router=LLMRouter([provider]),
     )
     assert result.intent == "question" and result.source in {"fallback"}
+
+
+def test_output_is_normalised_to_plain_text() -> None:
+    out = filter_output("We accept **credit cards** and __UPI__【1】.\n## Note\nEMI too.", []).text
+    assert out == "We accept credit cards and UPI[1].\nNote\nEMI too."

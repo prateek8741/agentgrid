@@ -18,3 +18,9 @@ fakeredis==2.40.0
 httpx==0.28.1
 python-multipart==0.0.32
 tzdata==2026.1
+# RAG: ONNX-runtime embeddings (no PyTorch) + document parsing.
+# onnxruntime 1.23.2 is the newest release with wheels for macOS Intel, Apple Silicon and Windows.
+fastembed==0.9.1
+onnxruntime==1.23.2
+pypdf==6.21.4
+python-docx==1.2.0

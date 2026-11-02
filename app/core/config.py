@@ -73,8 +73,9 @@ class Settings(BaseSettings):
 
     # ---- LLM ----
     groq_api_key: SecretStr = SecretStr("")
-    groq_model: str = "llama-3.3-70b-versatile"
-    groq_nlu_model: str = "llama-3.1-8b-instant"  # small, fast model for intent/entity extraction
+    # Verified against Groq's model list on 2026-11-02 (the Llama 3.x models were retired).
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_nlu_model: str = "openai/gpt-oss-20b"  # smaller, faster model for intent/entity extraction
     gemini_api_key: SecretStr = SecretStr("")
     gemini_model: str = "gemini-2.5-flash"
     gemini_nlu_model: str = "gemini-2.5-flash-lite"
@@ -93,7 +94,18 @@ class Settings(BaseSettings):
     upload_max_mb: int = 10
     max_chunks_per_document: int = 400
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dim: int = 384
     embedding_cache_dir: str = ".cache/fastembed"
+    embedding_threads: int = Field(default=2, ge=1, le=16)
+    embedding_batch_size: int = Field(default=32, ge=1, le=256)
+    # auto = pgvector on PostgreSQL, JSON + in-process cosine on SQLite.
+    # json = force the in-process backend (e.g. a Postgres without the pgvector extension).
+    vector_backend: Literal["auto", "pgvector", "json"] = "auto"
+    chunk_size_chars: int = Field(default=900, ge=200, le=4000)
+    chunk_overlap_chars: int = Field(default=150, ge=0, le=1000)
+    rag_top_k: int = Field(default=4, ge=1, le=10)
+    # Calibrated on bge-small with section-aware chunks: relevant >= 0.60, off-topic <= 0.53.
+    rag_min_score: float = Field(default=0.58, ge=0.0, le=1.0)  # below this: "I don't know"
 
     # ---- Channels ----
     whatsapp_verify_token: SecretStr = SecretStr("")
@@ -138,6 +150,12 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
+
+    @property
+    def uses_pgvector(self) -> bool:
+        if self.vector_backend == "auto":
+            return not self.is_sqlite
+        return self.vector_backend == "pgvector"
 
     @property
     def upload_max_bytes(self) -> int:

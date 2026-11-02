@@ -26,3 +26,14 @@ async def test_openapi_docs_available(client: AsyncClient) -> None:
     assert (await client.get("/docs")).status_code == 200
     spec = (await client.get("/openapi.json")).json()
     assert "/api/v1/auth/login" in spec["paths"]
+
+
+async def test_console_spa_is_served_with_client_side_routing(client: AsyncClient) -> None:
+    root = await client.get("/")
+    assert root.status_code == 200 and '<div id="root">' in root.text
+    deep = await client.get("/inbox")
+    assert deep.status_code == 200 and deep.text == root.text  # SPA fallback
+    assert (await client.get("/api/v1/does-not-exist")).status_code == 404
+    asset = next(part.split('"')[0] for part in root.text.split('src="')[1:] if part.startswith("/assets/"))
+    js = await client.get(asset)
+    assert js.status_code == 200 and "immutable" in js.headers["cache-control"]

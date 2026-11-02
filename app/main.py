@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 
+from app.api.console import mount_console
 from app.api.health import router as health_router
 from app.api.payments_mock import router as payments_mock_router
 from app.api.public_pages import router as public_pages_router
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
         return Response(body, media_type=content_type)
 
     init_tracing(app)
+    mount_console(app)  # last: catch-all for client-side routes
     return app
 
 

@@ -2,10 +2,11 @@
 
 AI-powered customer engagement & business automation platform. This is a multi-tenant SaaS proof of concept for RFP **TTG-AI-AGENTGRID** (The Talent Grid).
 
-> Status: **Phase 6 complete.**
+> Status: **Phase 7 complete.**
 > - **Phase 1 foundations:** config, data model and migrations, JWT auth, RBAC, multi-tenancy with agency hierarchy, audit log, API keys, Docker, and the task runner.
 > - **Phase 2 agent:** LLM layer (Groq primary, Gemini fallback, automatic failover) and a hybrid NLU (rules, then LLM). A state-machine dialogue manager runs lead qualification, booking and cancellation. An open-question tool loop handles everything else.
 > - **Phase 2 tools:** 10 tools: CRM, booking, notifications, handover, products, payment links and tickets. Four industry templates.
+> - **Phase 7 admin console:** a React + Vite + Tailwind SPA served by FastAPI at `/`. Its production build is committed, so Node isn't needed to run it. Pages: dashboard, live inbox, leads pipeline, appointments, knowledge base, AI agents with templates and playground, white-label branding, team, settings, and clients/tenants.
 > - **Phase 6 events & analytics:** Kafka (Redpanda) event bus, with an in-process fallback when it isn't configured. An analytics consumer writes daily aggregates. The dashboard API covers the pre-read KPIs (first response time, automated resolution, escalation, lead qualification, appointment conversion, tokens and cost), plus reseller and platform views. Also: Prometheus `/metrics`, a Grafana dashboard, optional OpenTelemetry and Sentry, and per-tenant data retention.
 > - **Phase 5 human handover:** a live inbox over WebSocket and Redis pub/sub. Agents can take over, assign, and reply live on the customer's channel (widget, WhatsApp, Messenger or REST webhook). The AI stays silent while a human owns the conversation, and agents can hand back to the AI or close it.
 > - **Phase 4 channels:** an embeddable web widget (`/widget.js`: Shadow DOM, white-label, live WebSocket with HTTP fallback, signed visitor sessions); a REST API channel (secret key); WhatsApp Cloud API and Messenger webhooks (signature-verified, retry de-duplication, Graph API replies). A demo storefront is served at `/demo/<tenant-slug>`.

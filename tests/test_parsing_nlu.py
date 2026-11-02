@@ -179,3 +179,21 @@ async def test_analyze_invalid_llm_json_falls_back() -> None:
 def test_output_is_normalised_to_plain_text() -> None:
     out = filter_output("We accept **credit cards** and __UPI__【1】.\n## Note\nEMI too.", []).text
     assert out == "We accept credit cards and UPI[1].\nNote\nEMI too."
+
+
+async def test_keyword_questions_defer_to_the_llm_classifier() -> None:
+    intents = get_template("real_estate_lead_qualifier").agent_fields()["intents"]
+    question = rules_nlu("Which banks do you work with for home loans?", intents)
+    statement = rules_nlu("I want to buy a 3BHK flat", intents)
+    assert question is not None and question.confidence < 0.85  # LLM gets to decide
+    assert statement is not None and statement.confidence >= 0.85  # obvious intent: no LLM call
+    provider = ScriptedProvider(lambda call: nlu_json("pricing", 0.9))
+    result = await analyze(
+        "Which banks do you work with for home loans?",
+        template_intents=intents,
+        business="X",
+        scope="x",
+        today=TODAY,
+        router=LLMRouter([provider]),
+    )
+    assert result.intent == "pricing" and provider.calls

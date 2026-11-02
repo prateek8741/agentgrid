@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Bot, LayoutTemplate, MessageCircle, Save, Send, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { atLeast, useAuth } from "../auth";
 import {
@@ -137,7 +137,9 @@ function Playground({ agent }: { agent: any }) {
   const [session, setSession] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
   useEffect(() => { setTurns([{ role: "bot", text: agent.greeting }]); setSession(null); }, [agent.id, agent.greeting]);
+  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" }); }, [turns, busy]);
   const send = async (msg = text) => {
     if (!msg.trim()) return;
     setTurns((t) => [...t, { role: "user", text: msg }]);
@@ -157,7 +159,7 @@ function Playground({ agent }: { agent: any }) {
   return (
     <Card title={<span className="flex items-center gap-2"><MessageCircle className="h-4 w-4" />Playground</span>}
       actions={<Button size="sm" variant="ghost" onClick={() => { setTurns([{ role: "bot", text: agent.greeting }]); setSession(null); }}>Reset</Button>}>
-      <div className="scrollbar-thin h-80 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-3">
+      <div ref={chatRef} className="scrollbar-thin h-80 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-3">
         {turns.map((t, i) => (
           <div key={i} className={clsx("flex", t.role === "user" ? "justify-end" : "justify-start")}>
             <div className={clsx("max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm", t.role === "user" ? "bg-brand text-white" : "bg-white shadow-sm")}>

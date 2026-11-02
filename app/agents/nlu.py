@@ -38,6 +38,9 @@ BUILTIN_INTENTS: dict[str, str] = {
 }
 
 RULE_CONFIDENCE = 0.95
+_QUESTION_RE = re.compile(
+    r"\?\s*$|^\s*(what|which|how|when|where|why|who|do|does|is|are|can|could|will|would|should)\b", re.I
+)
 SKIP_LLM_CONFIDENCE = 0.85
 
 _HANDOVER_RE = re.compile(
@@ -152,7 +155,12 @@ def rules_nlu(text: str, template_intents: list[dict[str, Any]]) -> NLUResult | 
         if hits and (best is None or hits > best[0]):
             best = (hits, intent["name"])
     if best:
-        return NLUResult(best[1], min(0.95, 0.8 + 0.07 * best[0]))
+        confidence = min(0.95, 0.8 + 0.07 * best[0])
+        if _QUESTION_RE.search(text):
+            # A question that merely mentions a keyword ("which banks do you work with for home
+            # loans?") is ambiguous: stay below the skip threshold so the LLM classifier decides.
+            confidence = min(confidence, SKIP_LLM_CONFIDENCE - 0.1)
+        return NLUResult(best[1], confidence)
     if parsing.is_yes(text) and len(text.split()) <= 4:
         return NLUResult("affirm", 0.9)
     if parsing.is_no(text) and len(text.split()) <= 4:

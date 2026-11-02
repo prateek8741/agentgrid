@@ -74,3 +74,6 @@ ehthumbs.db
 *~
 .vscode/*
 !.vscode/extensions.json
+
+# Submission pack (PDFs, profile) - kept out of the repo
+submission/
